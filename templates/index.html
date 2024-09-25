@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Control</title>
+    <script src="/static/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        button {
+            margin: 5px;
+            padding: 5px;
+        }
+
+        input {
+            margin: 5px;
+            padding: 5px;
+        }
+
+        .jog-control {
+            margin-bottom: 5px;
+        }
+
+        h2 {
+            margin-bottom: 10px;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+<h1>Robot Control Panel</h1>
+
+<h2>Jog Control</h2>
+<div>
+    <div class="jog-control">
+        <label>Slave 01:</label>
+        <button id="jog01-plus">Jog +</button>
+        <button id="jog01-minus">Jog -</button>
+        <label><span id="position01">??? mm</span></label>
+    </div>
+    <div class="jog-control">
+        <label>Slave 02:</label>
+        <button id="jog02-plus">Jog +</button>
+        <button id="jog02-minus">Jog -</button>
+        <label><span id="position02">??? mm</span></label>
+    </div>
+    <div class="jog-control">
+        <label>Slave 03:</label>
+        <button id="jog03-plus">Jog +</button>
+        <button id="jog03-minus">Jog -</button>
+        <label><span id="position03">??? mm</span></label>
+    </div>
+    <div class="jog-control">
+        <label>Slave 04:</label>
+        <button id="jog04-plus">Jog +</button>
+        <button id="jog04-minus">Jog -</button>
+        <label><span id="position04">??? mm</span></label>
+    </div>
+</div>
+
+<h2>Other Controls</h2>
+<div>
+    <button onclick="servo(true)">Servo ON</button>
+    <button onclick="servo(false)">Servo OFF</button>
+</div>
+<div>
+    <button onclick="pause(true)">Pause ON</button>
+    <button onclick="pause(false)">Pause OFF</button>
+
+</div>
+<div>
+    <button onclick="alarmReset()">Alarm Reset</button>
+    <button onclick="home()">Home</button>
+    <button onclick="currentPosition()">Current Position</button>
+</div>
+
+<h2>Move To</h2>
+<div>
+    <input type="number" id="move-to-row" placeholder="Row">
+    <button onclick="moveTo()">Move To</button>
+</div>
+
+<h2>Set To</h2>
+<div>
+    <input type="text" id="set-to-slave" placeholder="Slave">
+    <input type="number" id="set-to-row" placeholder="Row">
+    <input type="number" id="set-to-position" placeholder="Position">
+    <input type="number" id="set-to-speed" placeholder="Speed">
+    <input type="number" id="set-to-acc" placeholder="Acceleration">
+    <input type="number" id="set-to-dec" placeholder="Deceleration">
+    <button onclick="setTo()">Set To</button>
+</div>
+
+<h2>Status</h2>
+<pre id="status"></pre>
+
+<script>
+    $(document).ready(function () {
+        for (let i = 1; i <= 4; i++) {
+            let slaveId = i.toString().padStart(2, '0');
+
+            $(`#jog${slaveId}-plus`).on('mousedown', function () {
+                jog(slaveId, true, true);
+            }).on('mouseup mouseleave', function () {
+                jog(slaveId, true, false);
+            });
+
+            $(`#jog${slaveId}-minus`).on('mousedown', function () {
+                jog(slaveId, false, true);
+            }).on('mouseup mouseleave', function () {
+                jog(slaveId, false, false);
+            });
+        }
+        updatePositions();
+    });
+
+
+    function servo(on) {
+        $.ajax({
+            url: '/api/servo',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({on: on}),
+            success: function (response) {
+                console.log('Servo:', response);
+            }
+        });
+    }
+
+    function alarmReset() {
+        $.post('/api/alarm_reset', function (response) {
+            console.log('Alarm reset:', response);
+        });
+    }
+
+    function pause(pause) {
+        $.ajax({
+            url: '/api/pause',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({pause: pause}),
+            success: function (response) {
+                console.log('Pause:', response);
+            }
+        });
+    }
+
+    function home() {
+        $.post('/api/home', function (response) {
+            console.log('Home:', response);
+        });
+    }
+
+    function currentPosition() {
+        $.get('/api/current_position', function (response) {
+            $('#status').text(JSON.stringify(response, null, 2));
+            updatePositions(response);
+        });
+    }
+
+    function updatePositions(positions) {
+        if (positions) {
+            for (let slave in positions) {
+                $(`#position${slave}`).text(`${positions[slave] / 100} mm`);
+            }
+        }
+    }
+
+    function jog(slave, positiveSide, move) {
+        $.ajax({
+            url: '/api/jog',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                slave: slave,
+                positive_side: positiveSide,
+                move: move
+            }),
+            success: function (response) {
+                console.log('Jog:', response);
+            }
+        });
+    }
+
+    function moveTo() {
+        $.ajax({
+            url: '/api/move_to',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({row: parseInt($('#move-to-row').val())}),
+            success: function (response) {
+                console.log('Move to:', response);
+            }
+        });
+    }
+
+    function setTo() {
+        $.ajax({
+            url: '/api/set_to',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                slave: $('#set-to-slave').val(),
+                row: parseInt($('#set-to-row').val()),
+                position: parseFloat($('#set-to-position').val()),
+                speed: parseFloat($('#set-to-speed').val()),
+                acc: parseFloat($('#set-to-acc').val()),
+                dec: parseFloat($('#set-to-dec').val())
+            }),
+            success: function (response) {
+                console.log('Set to:', response);
+            }
+        });
+    }
+
+    setInterval(currentPosition, 1000);
+</script>
+</body>
+</html>
