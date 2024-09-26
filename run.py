@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, jsonify
+from get_comport import get_comport
 from robot import Robot
 import threading
 
@@ -9,7 +10,8 @@ robot = None
 def initialize_robot():
     global robot
     if robot is None:
-        robot = Robot('COM13', baudrate=38400)
+        port = get_comport('ATEN USB to Serial', 'USB-Serial Controller')
+        robot = Robot(port, baudrate=38400)
 
     def run_robot():
         while True:

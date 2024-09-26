@@ -2,13 +2,12 @@ import time
 from datetime import datetime, timedelta
 import serial
 from typing import Dict, Union, List
+from get_comport import get_comport
 
 
 class Robot:
     def __init__(self, port: str, baudrate: int = 38400):
         self.ser = serial.Serial(port=port, baudrate=baudrate)
-        print(f"Connected to: {self.ser.portstr}")
-
         self.current_position_vel: Dict[str, int] = {'01': 0, '02': 0, '03': 0, '04': 0}
         self.send_data_last_datetime = datetime.now()
         self.buffer = bytearray()
@@ -112,12 +111,13 @@ class Robot:
             while b'\r\n' in self.buffer:
                 message, self.buffer = self.buffer.split(b'\r\n', 1)
                 if message.startswith(b':'):
-                    print(f'receive: {message + b"\r\n"}')
+                    print(f"receive: {message.decode()}\\r\\n")
                     self.evens(message.decode())
 
 
 if __name__ == '__main__':
-    robot = Robot('COM13', baudrate=38400)
+    port = get_comport('ATEN USB to Serial', 'USB-Serial Controller')
+    robot = Robot(port, baudrate=38400)
     robot.move_to(0)
     time.sleep(2)
     robot.move_to(8)
