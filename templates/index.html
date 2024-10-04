@@ -22,10 +22,6 @@
         h2 {
             margin: 30px 0 10px;
         }
-        #status {
-            white-space: pre-wrap;
-            word-break: break-all;
-        }
     </style>
 </head>
 <body>
@@ -77,6 +73,7 @@
     <section aria-labelledby="status-heading">
         <h2 id="status-heading">Status</h2>
         <pre id="status" aria-live="polite"></pre>
+        <pre id="error_status" aria-live="polite"></pre>
     </section>
 
     <script>
@@ -127,7 +124,7 @@
                 return response;
             }).catch(error => {
                 console.error(`Error in ${endpoint}:`, error);
-                $('#status').text(`Error in ${endpoint}: ${error.statusText}`);
+                $('#error_status').text(`Error in ${endpoint}: ${error.statusText}`);
             });
         }
 
