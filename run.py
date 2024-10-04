@@ -1,7 +1,17 @@
-from flask import Flask, render_template, request, jsonify
+import os
+from flask import Flask, render_template, request, jsonify, abort
 from get_comport import get_comport
 from robot import Robot
 import threading
+from dotenv import load_dotenv
+import logging
+
+# Load environment variables
+load_dotenv()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 robot = None
@@ -10,18 +20,29 @@ robot = None
 def initialize_robot():
     global robot
     if robot is None:
-        port = get_comport('ATEN USB to Serial', 'USB-Serial Controller')
-        robot = Robot(port, baudrate=38400)
+        try:
+            port = get_comport('ATEN USB to Serial', 'USB-Serial Controller')
+            robot = Robot(port, baudrate=38400)
+            logger.info("Robot initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize robot: {e}")
+            return False
 
     def run_robot():
         while True:
-            robot.run()
+            try:
+                robot.run()
+            except Exception as e:
+                logger.error(f"Error in robot.run(): {e}")
 
     robot_thread = threading.Thread(target=run_robot, daemon=True)
     robot_thread.start()
+    return True
 
 
-initialize_robot()
+if not initialize_robot():
+    logger.error("Failed to initialize robot. Exiting.")
+    exit(1)
 
 
 @app.route('/')
@@ -31,59 +52,113 @@ def index():
 
 @app.route('/api/servo', methods=['POST'])
 def servo():
-    on = request.json['on']
-    robot.servo(on)
-    return jsonify({'status': 'success'})
+    try:
+        on = request.json.get('on')
+        if on is None:
+            abort(400, description="Missing 'on' parameter")
+        robot.servo(on)
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        logger.error(f"Error in servo: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @app.route('/api/alarm_reset', methods=['POST'])
 def alarm_reset():
-    robot.alarm_reset()
-    return jsonify({'status': 'success'})
+    try:
+        robot.alarm_reset()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        logger.error(f"Error in alarm_reset: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @app.route('/api/pause', methods=['POST'])
 def pause():
-    pause = request.json['pause']
-    robot.pause(pause)
-    return jsonify({'status': 'success'})
+    try:
+        pause = request.json.get('pause')
+        if pause is None:
+            abort(400, description="Missing 'pause' parameter")
+        robot.pause(pause)
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        logger.error(f"Error in pause: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @app.route('/api/home', methods=['POST'])
 def home():
-    robot.home()
-    return jsonify({'status': 'success'})
+    try:
+        robot.home()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        logger.error(f"Error in home: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @app.route('/api/jog', methods=['POST'])
 def jog():
-    data = request.json
-    slave = data['slave']
-    positive_side = data['positive_side']
-    move = data['move']
-    robot.jog(slave, positive_side, move)
-    return jsonify({'status': 'success'})
+    try:
+        data = request.json
+        required_fields = ['slave', 'positive_side', 'move']
+        if not all(field in data for field in required_fields):
+            abort(400, description="Missing required fields")
+        robot.jog(data['slave'], data['positive_side'], data['move'])
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        logger.error(f"Error in jog: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-@app.route('/api/current_position', methods=['GET'])
+@app.route('/api/current_position', methods=['GET', 'POST'])
 def current_position():
-    robot.current_position()
-    return jsonify(robot.current_position_vel)
+    try:
+        robot.current_position()
+        return jsonify({'status': 'success', 'data': robot.current_position_vel})
+    except Exception as e:
+        logger.error(f"Error in current_position: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @app.route('/api/move_to', methods=['POST'])
 def move_to():
-    row = request.json['row']
-    robot.move_to(row)
-    return jsonify({'status': 'success'})
+    try:
+        row = request.json.get('row')
+        if row is None:
+            abort(400, description="Missing 'row' parameter")
+        robot.move_to(row)
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        logger.error(f"Error in move_to: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @app.route('/api/set_to', methods=['POST'])
 def set_to():
-    data = request.json
-    robot.set_to(data['slave'], data['row'], data['position'], data['speed'], data['acc'], data['dec'])
-    return jsonify({'status': 'success'})
+    try:
+        data = request.json
+        required_fields = ['slave', 'row', 'position', 'speed', 'acc', 'dec']
+        if not all(field in data for field in required_fields):
+            abort(400, description="Missing required fields")
+        robot.set_to(data['slave'], data['row'], data['position'], data['speed'], data['acc'], data['dec'])
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        logger.error(f"Error in set_to: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.errorhandler(400)
+def bad_request(error):
+    return jsonify({'status': 'error', 'message': error.description}), 400
+
+
+@app.errorhandler(500)
+def internal_server_error(error):
+    return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+    HOST = os.getenv('FLASK_HOST', '0.0.0.0')
+    PORT = int(os.getenv('FLASK_PORT', '5000'))
+
+    app.run(host=HOST, port=PORT, debug=True, use_reloader=False)

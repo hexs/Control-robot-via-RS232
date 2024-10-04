@@ -2,12 +2,21 @@ import time
 from datetime import datetime, timedelta
 import serial
 from typing import Dict, Union, List
+import logging
 from get_comport import get_comport
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class Robot:
-    def __init__(self, port: str, baudrate: int = 38400):
-        self.ser = serial.Serial(port=port, baudrate=baudrate)
+    def __init__(self, port: str, baudrate: int = 38400) -> None:
+        self.logger = logging.getLogger(__name__)
+        try:
+            self.ser = serial.Serial(port=port, baudrate=baudrate)
+        except serial.SerialException as e:
+            self.logger.error(f"Failed to initialize serial connection: {e}")
+            raise
+
         self.current_position_vel: Dict[str, int] = {'01': 0, '02': 0, '03': 0, '04': 0}
         self.send_data_last_datetime = datetime.now()
         self.buffer = bytearray()
@@ -25,8 +34,12 @@ class Robot:
         self.send_data_last_datetime = datetime.now()
         message = f'{slave_address}{function_code}{register_address}{"".join(args)}'
         message = self.LRC_calculation(message)
-        print(f"Sending: {message} len: {len(message)}")
-        self.ser.write(message)
+        try:
+            # self.logger.info(f"Sending: {message} len: {len(message)}")
+            self.ser.write(message)
+        except serial.SerialException as e:
+            self.logger.error(f"Failed to send data: {e}")
+            raise
 
     def send_data(self, slave_address: Union[str, List[str]], function_code: str, register_address: str,
                   *args: str) -> None:
@@ -37,20 +50,20 @@ class Robot:
             self.send_data_(slave_address, function_code, register_address, *args)
 
     def servo(self, on: bool = True) -> None:
-        print('Servo ON' if on else 'Servo OFF')
+        self.logger.info('Servo ON' if on else 'Servo OFF')
         self.send_data('all', '05', '0403', 'FF00' if on else '0000')
 
     def alarm_reset(self) -> None:
-        print('Alarm reset')
+        self.logger.info('Alarm reset')
         self.send_data('all', '05', '0407', 'FF00')
         self.send_data('all', '05', '0407', '0000')
 
-    def pause(self, pause=True) -> None:
-        print('Pause' if pause else 'Un pause')
+    def pause(self, pause: bool = True) -> None:
+        self.logger.info('Pause' if pause else 'Un pause')
         self.send_data('all', '05', '040A', 'FF00' if pause else '0000')
 
     def home(self) -> None:
-        print('Home')
+        self.logger.info('Home')
         self.send_data('all', '05', '040B', 'FF00')
         self.send_data('all', '05', '040B', '0000')
 
@@ -61,7 +74,6 @@ class Robot:
         self.current_position()
 
     def current_position(self) -> None:
-        print('Read Current Position')
         self.send_data('all', '03', '9000', '0002')
 
     def move_to(self, row: int) -> None:
@@ -101,18 +113,23 @@ class Robot:
             vel = int(string[7:-2], 16)
             if vel > 0x7FFFFFFF:
                 vel -= 0x100000000
-            print(slave, vel, hex(vel))
+            self.logger.info(f"Slave: {slave}, Velocity: {vel}, Hex: {hex(vel)}")
             self.current_position_vel[slave] = vel
 
     def run(self) -> None:
-        if self.ser.in_waiting:
-            data_ = self.ser.read(self.ser.in_waiting)
-            self.buffer.extend(data_)
-            while b'\r\n' in self.buffer:
-                message, self.buffer = self.buffer.split(b'\r\n', 1)
-                if message.startswith(b':'):
-                    print(f"receive: {message.decode()}\\r\\n")
-                    self.evens(message.decode())
+        try:
+            if self.ser.in_waiting:
+                data_ = self.ser.read(self.ser.in_waiting)
+                self.buffer.extend(data_)
+                while b'\r\n' in self.buffer:
+                    message, self.buffer = self.buffer.split(b'\r\n', 1)
+                    if message.startswith(b':'):
+                        self.logger.info(f"Received: {message.decode()}\\r\\n")
+                        self.evens(message.decode())
+        except serial.SerialException as e:
+            self.logger.error(f"Serial communication error: {e}")
+        except Exception as e:
+            self.logger.error(f"Unexpected error in run method: {e}")
 
 
 if __name__ == '__main__':
